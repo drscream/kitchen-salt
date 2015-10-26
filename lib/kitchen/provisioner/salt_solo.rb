@@ -56,6 +56,7 @@ module Kitchen
       default_config :salt_run_highstate, true
       default_config :salt_copy_filter, []
       default_config :is_file_root, false
+      default_config :is_salt_root, false
 
       default_config :dependencies, []
       default_config :vendor_path, nil
@@ -167,34 +168,39 @@ module Kitchen
         super
         prepare_data
         prepare_minion
-        prepare_state_top
-        prepare_pillars
         prepare_grains
-
-        if config[:state_collection] || config[:is_file_root]
-          prepare_state_collection
+        if config[:is_salt_root]
+          debug("copying #{config[:kitchen_root]} to #{sandbox_path}")
+          cp_r_with_filter(config[:kitchen_root], sandbox_path, config[:salt_copy_filter])
         else
-          prepare_formula config[:kitchen_root], config[:formula]
+          prepare_state_top
+          prepare_pillars
 
-          unless config[:vendor_path].nil?
-            if Pathname.new(config[:vendor_path]).exist?
-              deps = if Pathname.new(config[:vendor_path]).absolute?
-                Dir["#{config[:vendor_path]}/*"]
+          if config[:state_collection] || config[:is_file_root]
+            prepare_state_collection
+          else
+            prepare_formula config[:kitchen_root], config[:formula]
+
+            unless config[:vendor_path].nil?
+              if Pathname.new(config[:vendor_path]).exist?
+                deps = if Pathname.new(config[:vendor_path]).absolute?
+                  Dir["#{config[:vendor_path]}/*"]
+                else
+                  Dir["#{config[:kitchen_root]}/#{config[:vendor_path]}/*"]
+                end
+
+                deps.each do |d|
+                  prepare_formula "#{config[:kitchen_root]}/#{config[:vendor_path]}", File.basename(d)
+                end
               else
-                Dir["#{config[:kitchen_root]}/#{config[:vendor_path]}/*"]
+                # :vendor_path was set, but not valid
+                raise UserError, "kitchen-salt: Invalid vendor_path set: #{config[:vendor_path]}"
               end
-
-              deps.each do |d|
-                prepare_formula "#{config[:kitchen_root]}/#{config[:vendor_path]}", File.basename(d)
-              end
-            else
-              # :vendor_path was set, but not valid
-              raise UserError, "kitchen-salt: Invalid vendor_path set: #{config[:vendor_path]}"
             end
-          end
 
-          config[:dependencies].each do |formula|
-            prepare_formula formula[:path], formula[:name]
+            config[:dependencies].each do |formula|
+              prepare_formula formula[:path], formula[:name]
+            end
           end
         end
       end
