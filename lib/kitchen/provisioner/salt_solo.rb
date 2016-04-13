@@ -172,6 +172,11 @@ module Kitchen
         if config[:is_salt_root]
           debug("copying #{config[:kitchen_root]} to #{sandbox_path}")
           cp_r_with_filter(config[:kitchen_root], sandbox_path, config[:salt_copy_filter])
+          config[:dependencies].each do |formula|
+            prepare_formula formula[:path], formula[:name]
+          end
+          prepare_state_top
+          prepare_pillars
         else
           prepare_state_top
           prepare_pillars
